@@ -40,9 +40,13 @@ Humanitarian teams need fast, comparable household data to prioritise assistance
 
 ---
 
-## 2. What to look for when you test the live form
+## 2. Testing the form
 
-Walk through these paths to see the logic work:
+To test the form:
+
+1. Download [`form/hararghe_hna_v1.xlsx`](form/hararghe_hna_v1.xlsx)
+2. Upload to KoboToolbox or open in ODK Collect
+3. Walk through these paths to see the logic work:
 
 | Try this | Expect this |
 |---|---|
@@ -52,16 +56,16 @@ Walk through these paths to see the logic work:
 | In the roster, enter a child older than the household head minus 12 | Constraint message blocks the entry |
 | In Section 3, answer **No** to "Did the household experience any shock?" | The entire shock module is skipped |
 | In WASH, select **Piped water on plot** as the main source | Distance and travel-time questions are skipped |
-| Finish the form | A summary screen shows the computed HHS, rCSI, TLU, and dependency ratio |
+| Finish the form | Computed HHS, rCSI, TLU, and dependency ratio are saved with the submission |
 
 ---
 
 ## 3. Form structure
 
-Six groups, each shown as its own screen set (`field-list` appearance used where it speeds up entry).
+Six groups covering household demographics, livelihoods, food security, WASH, and verification.
 
 ### Section 1: Metadata, consent, and location
-- **Metadata:** `start`, `end`, `today`, `deviceid`, plus a calculated interview duration (`end - start`) used for quality checks.
+- **Metadata:** `start`, `end`, `today`, `deviceid` captured automatically. Interview duration is calculated in post-collection analysis.
 - **Consent gate:** if the respondent declines, the form ends (`relevant` on all later groups).
 - **Phone validation:** `regex(., '^(09|07)[0-9]{8}$')`. This validates Ethiopian mobile formats generally; it does not verify which operator owns the number.
 - **Cascading location:** Zone → Woreda → Kebele using `choice_filter` with `zone` and `woreda` filter columns in the `choices` sheet.
@@ -79,7 +83,7 @@ Six groups, each shown as its own screen set (`field-list` appearance used where
 - **Age consistency:** the household head's age is captured *before* the roster. Members recorded as the head's children must satisfy `. <= ${head_age} - 12`. Comparing against a single stored value is more reliable than comparing across repeat rows.
 
 ### Section 3: Livelihoods
-- **Land allocation:** hectares (or *timad*, a local unit, converted in a calculate) under Khat, sorghum, maize, and other crops. A constraint checks that the sum of allocations does not exceed total land reported.
+- **Land allocation:** hectares under Khat, sorghum, maize, and other crops. A constraint checks that the sum of allocations does not exceed total land reported.
 - **Livestock and TLU:** numeric counts per species, each multiplied by a conversion factor and summed:
 
   | Species | TLU factor |
@@ -111,9 +115,8 @@ Six groups, each shown as its own screen set (`field-list` appearance used where
   Score range 0–56. Higher is worse.
 
 ### Section 5: WASH
-- **Main water source** with seasonal variation (dry vs. wet season). Options include traditional ponds (*birkas*), shallow wells, motorised boreholes, rivers, and piped water.
-- **Skip logic:** if the source is on-plot piped water, distance and time questions are bypassed (`relevant = ${source} != 'piped_onplot'`).
-- **Constraint:** round-trip time must be consistent with stated distance (flags implausible walking speeds as a soft warning via `constraint_message`).
+- **Main water source** with seasonal variation (dry vs. wet season). Options include piped water, boreholes, protected/unprotected wells, springs, rivers, rainwater, and bottled water.
+- **Skip logic:** if the source is on-plot piped water, distance and time questions are bypassed (`relevant = ${water_dry} != 'piped_plot'`).
 - Sanitation and handwashing items follow JMP-style categories.
 
 ### Section 6: Verification
@@ -135,7 +138,7 @@ Enumerator (ODK Collect / Enketo)
 KoboToolbox server  ──►  Export (XLS / CSV, repeat groups as separate sheets)
                                    │
                                    ▼
-                    analysis/clean_and_score.R (or .py)
+                    analysis/clean_and_score.py
                       • checks duration, GPS, duplicates
                       • recomputes HHS / rCSI / TLU to confirm form calculations
                       • produces a quality-control summary by enumerator
@@ -171,7 +174,6 @@ Sample data: `data/sample_submissions.csv` (20 synthetic records, including inte
 - **Geofencing is approximate.** Bounding-box checks catch gross errors only. A rectangle is not the real boundary of the zones.
 - **Kebele and woreda lists** are illustrative and not an official administrative gazetteer. Verify against CSA / OCHA COD data before production.
 - **Calculations** run client-side. Always recompute indicators in analysis rather than trusting the form's values blindly.
-- **Public preview:** submissions to the live link are discarded or deleted periodically. Do not enter real personal information.
 - **Multi-language support:** Form is currently English-only. Amharic, Afaan Oromo, and Somali translations are planned for future implementation.
 
 ---
@@ -211,6 +213,5 @@ XLSForm spec · pyxform · KoboToolbox · ODK Collect · Enketo · HHS (FANTA) �
 - Form design for data quality at source
 - Skip logic to reduce enumerator burden
 - Verification mechanisms (GPS, photos, signatures)
-- Synthetic data generation for testing
 
 Licence: MIT (form and code). Synthetic data only.
