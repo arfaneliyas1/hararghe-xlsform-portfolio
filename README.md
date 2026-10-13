@@ -214,4 +214,13 @@ XLSForm spec · pyxform · KoboToolbox · ODK Collect · Enketo · HHS (FANTA) �
 - Skip logic to reduce enumerator burden
 - Verification mechanisms (GPS, photos, signatures)
 
+---
+
+### 📬 Connect With Me
+
+- **Email:** [arfaneliyas27@gmail.com](mailto:arfaneliyas27@gmail.com)
+- **LinkedIn:** [linkedin.com/in/arfaneliyas](https://www.linkedin.com/in/arfaneliyas/?isSelfProfile=true)
+
+---
+
 Licence: MIT (form and code). Synthetic data only.
