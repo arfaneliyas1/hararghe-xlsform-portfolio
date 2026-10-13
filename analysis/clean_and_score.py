@@ -61,31 +61,57 @@ def check_gps_bounding_box(df):
     return df
 
 def check_duration(df):
-    """Check interview duration for unusually short interviews."""
+    """Check interview duration for negative or unusually short interviews."""
     df['start_dt'] = pd.to_datetime(df['start'])
     df['end_dt'] = pd.to_datetime(df['end'])
     df['duration_minutes'] = (df['end_dt'] - df['start_dt']).dt.total_seconds() / 60
     
-    # Flag interviews shorter than 5 minutes (suspicious)
-    df['duration_flag'] = np.where(df['duration_minutes'] < 5, 'too_short', 'acceptable')
+    # Flag negative durations (end before start)
+    df['duration_flag'] = np.where(df['duration_minutes'] < 0, 'negative_duration', 'acceptable')
     
+    # Flag short durations (< 15 minutes)
+    df['duration_flag'] = np.where(
+        (df['duration_minutes'] >= 0) & (df['duration_minutes'] < 15),
+        'too_short',
+        df['duration_flag']
+    )
+    
+    negative_duration = df[df['duration_flag'] == 'negative_duration']
     short_interviews = df[df['duration_flag'] == 'too_short']
-    print(f"Duration Check: {len(short_interviews)} interviews shorter than 5 minutes")
+    print(f"Duration Check: {len(negative_duration)} negative durations, {len(short_interviews)} interviews shorter than 15 minutes")
     
     return df
 
 def check_duplicates(df):
-    """Check for duplicate respondent codes."""
-    duplicate_codes = df[df.duplicated(subset=['resp_name_code'], keep=False)]
+    """Check for duplicate respondent codes and flag rows."""
+    df['duplicate_code_flag'] = df.duplicated(subset=['resp_name_code'], keep=False)
+    
+    duplicate_codes = df[df['duplicate_code_flag']]
     print(f"Duplicate Check: {len(duplicate_codes)} records with duplicate respondent codes")
     
     return df
 
 def recompute_hhs(df):
-    """Recompute Household Hunger Scale score."""
-    # HHS scoring: rarely=1, sometimes=1, often=2
-    # This is a placeholder - actual implementation depends on form structure
-    df['hhs_score_recomputed'] = df['hhs_score']  # Placeholder
+    """Recompute Household Hunger Scale score from item responses."""
+    # HHS scoring: no=0, rarely/sometimes=1, often=2
+    def score_hhs_item(response, freq):
+        if response == 'no':
+            return 0
+        if freq == 'often':
+            return 2
+        return 1  # rarely or sometimes
+    
+    df['hhs1_s_recomputed'] = df.apply(lambda row: score_hhs_item(row['hhs1'], row['hhs1_f']), axis=1)
+    df['hhs2_s_recomputed'] = df.apply(lambda row: score_hhs_item(row['hhs2'], row['hhs2_f']), axis=1)
+    df['hhs3_s_recomputed'] = df.apply(lambda row: score_hhs_item(row['hhs3'], row['hhs3_f']), axis=1)
+    
+    df['hhs_score_recomputed'] = df['hhs1_s_recomputed'] + df['hhs2_s_recomputed'] + df['hhs3_s_recomputed']
+    
+    # Recompute category
+    df['hhs_cat_recomputed'] = np.where(
+        df['hhs_score_recomputed'] <= 1, 'little_none',
+        np.where(df['hhs_score_recomputed'] <= 3, 'moderate', 'severe')
+    )
     
     # Compare with form-calculated values
     hhs_diff = df[df['hhs_score_recomputed'] != df['hhs_score']]
@@ -144,19 +170,21 @@ def recompute_dep_ratio(df):
 def generate_qc_summary(df):
     """Generate quality control summary by enumerator."""
     qc_summary = df.groupby('enum_id').agg({
-        '_quality_flag': 'count',
+        'enum_id': 'count',
         'gps_quality_flag': lambda x: (x == 'poor_accuracy').sum(),
         'gps_in_box': lambda x: (~x).sum(),
         'duration_flag': lambda x: (x == 'too_short').sum(),
+        'duplicate_code_flag': 'sum',
         'hhs_score': 'mean',
         'rcsi_score': 'mean',
         'tlu': 'mean',
         'dep_ratio': 'mean'
     }).rename(columns={
-        '_quality_flag': 'total_submissions',
+        'enum_id': 'total_submissions',
         'gps_quality_flag': 'poor_gps_count',
         'gps_in_box': 'gps_outside_box_count',
         'duration_flag': 'short_duration_count',
+        'duplicate_code_flag': 'duplicate_code_count',
         'hhs_score': 'avg_hhs',
         'rcsi_score': 'avg_rcsi',
         'tlu': 'avg_tlu',
@@ -187,8 +215,15 @@ def generate_overall_summary(df):
 
 def main():
     """Main analysis pipeline."""
-    input_file = '../data/sample_submissions.csv'
-    output_file = '../data/cleaned_submissions.csv'
+    import os
+    
+    # Get script directory and set paths relative to repo root
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    repo_root = os.path.dirname(script_dir)
+    
+    input_file = os.path.join(repo_root, 'data', 'sample_submissions.csv')
+    output_file = os.path.join(repo_root, 'data', 'cleaned_submissions.csv')
+    qc_summary_file = os.path.join(repo_root, 'data', 'qc_summary_by_enumerator.csv')
     
     # Load data
     df = load_data(input_file)
@@ -214,8 +249,8 @@ def main():
     print(f"\nCleaned data saved to: {output_file}")
     
     # Save QC summary
-    qc_summary.to_csv('../data/qc_summary_by_enumerator.csv')
-    print("QC summary saved to: ../data/qc_summary_by_enumerator.csv")
+    qc_summary.to_csv(qc_summary_file)
+    print(f"QC summary saved to: {qc_summary_file}")
 
 if __name__ == '__main__':
     main()
